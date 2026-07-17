@@ -4,3 +4,4 @@ with_msrv = true
 with_audit = true
 with_deny = true
 with_docs = true
+runtime = "nix"

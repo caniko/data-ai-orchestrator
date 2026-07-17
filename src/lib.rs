@@ -25,7 +25,7 @@ pub use artifact::{
     TaskCache, TaskCacheKey,
 };
 pub use control::RunController;
-pub use durable::{DurableExecutor, DurableExecutorOptions};
+pub use durable::{DurableExecutor, DurableExecutorOptions, WorkOutcome};
 pub use error::{
     AdapterError, IdentifierError, OrchestratorError, RegistryError, RepositoryError, TaskError,
     WorkflowError,

@@ -25,6 +25,19 @@ pub struct DurableExecutorOptions {
     pub max_idle_time_ms: Option<u64>,
 }
 
+/// Result of one worker polling tick.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WorkOutcome {
+    Idle,
+    Recovered {
+        steps: usize,
+    },
+    Progressed {
+        run_id: crate::RunId,
+        status: crate::RunStatus,
+    },
+}
+
 impl Default for DurableExecutorOptions {
     fn default() -> Self {
         Self {
@@ -156,6 +169,51 @@ impl DurableExecutor {
             .cancel_run(run_id)
             .await
             .map_err(OrchestratorError::from)
+    }
+
+    /// Claims and executes one runnable step from any active run.
+    ///
+    /// The caller owns process supervision and sleep policy; this method only
+    /// performs one durable unit of work and returns an explicit idle result.
+    pub async fn work_once(
+        &self,
+        metrics: Vec<crate::Metric>,
+    ) -> Result<WorkOutcome, OrchestratorError> {
+        let Some(claim) = self
+            .repository
+            .claim_next_runnable_step(&self.options.worker, self.options.lease_ms)
+            .await
+            .map_err(OrchestratorError::from)?
+        else {
+            let recovered = self
+                .repository
+                .recover_expired()
+                .await
+                .map_err(OrchestratorError::from)?;
+            return if recovered.is_empty() {
+                Ok(WorkOutcome::Idle)
+            } else {
+                Ok(WorkOutcome::Recovered {
+                    steps: recovered.len(),
+                })
+            };
+        };
+        let run_id = claim.run_id.clone();
+        let completion = self.execute_claim(&claim).await?;
+        let run = self
+            .repository
+            .complete_step(&claim, completion)
+            .await
+            .map_err(OrchestratorError::from)?;
+        let run = self
+            .repository
+            .finish_run(&run.run_id, metrics)
+            .await
+            .map_err(OrchestratorError::from)?;
+        Ok(WorkOutcome::Progressed {
+            run_id,
+            status: run.status,
+        })
     }
 
     /// Streams the durable event log after the supplied sequence number.

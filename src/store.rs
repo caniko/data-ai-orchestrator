@@ -276,6 +276,16 @@ pub trait EventSink: Send + Sync {
 pub trait RunRepository: Send + Sync {
     async fn create_run(&self, request: RunRequest) -> Result<RunRecord, RepositoryError>;
     async fn load_run(&self, run_id: &RunId) -> Result<Option<RunRecord>, RepositoryError>;
+    /// Finds and claims one runnable step across all active runs.
+    ///
+    /// Implementations may use an advisory candidate scan, but the returned
+    /// claim must be fenced by the same transactional lease checks as
+    /// [`Self::claim_next_step`].
+    async fn claim_next_runnable_step(
+        &self,
+        worker: &crate::WorkerProfile,
+        lease_ms: u64,
+    ) -> Result<Option<StepClaim>, RepositoryError>;
     async fn claim_next_step(
         &self,
         run_id: &RunId,
@@ -930,6 +940,28 @@ impl RunRepository for InMemoryRunStore {
 
     async fn load_run(&self, run_id: &RunId) -> Result<Option<RunRecord>, RepositoryError> {
         Ok(self.state.read().await.runs.get(run_id).cloned())
+    }
+
+    async fn claim_next_runnable_step(
+        &self,
+        worker: &crate::WorkerProfile,
+        lease_ms: u64,
+    ) -> Result<Option<StepClaim>, RepositoryError> {
+        let candidates = self
+            .state
+            .read()
+            .await
+            .runs
+            .values()
+            .filter(|run| run.status == RunStatus::Running)
+            .map(|run| run.run_id.clone())
+            .collect::<Vec<_>>();
+        for run_id in candidates {
+            if let Some(claim) = self.claim_next_step(&run_id, worker, lease_ms).await? {
+                return Ok(Some(claim));
+            }
+        }
+        Ok(None)
     }
 
     async fn claim_next_step(

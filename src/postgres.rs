@@ -364,6 +364,38 @@ impl RunRepository for PostgresRunStore {
             .map_err(|error| storage(error.message))
     }
 
+    async fn claim_next_runnable_step(
+        &self,
+        worker: &WorkerProfile,
+        lease_ms: u64,
+    ) -> Result<Option<StepClaim>, RepositoryError> {
+        // The candidate scan is advisory. claim_next_step reacquires and
+        // validates the run lock, so concurrent workers cannot receive an
+        // unfenced claim.
+        let candidates = query(
+            "SELECT run_id
+             FROM orchestrator_runs
+             WHERE payload->>'status' = 'Running'
+             ORDER BY updated_at, run_id
+             LIMIT $1",
+        )
+        .bind(RECOVERY_BATCH_SIZE)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        for row in candidates {
+            let run_id = RunId::new(row.try_get::<String, _>("run_id").map_err(storage)?).map_err(
+                |error| RepositoryError::InvalidRequest {
+                    message: error.to_string(),
+                },
+            )?;
+            if let Some(claim) = self.claim_next_step(&run_id, worker, lease_ms).await? {
+                return Ok(Some(claim));
+            }
+        }
+        Ok(None)
+    }
+
     async fn claim_next_step(
         &self,
         run_id: &RunId,

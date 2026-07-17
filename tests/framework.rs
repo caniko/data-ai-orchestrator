@@ -3,7 +3,7 @@ use data_ai_orchestrator::{
     ArtifactMetadata, DurableExecutor, ExecutionEvent, IdempotencyKey, InMemoryArtifactStore,
     InMemoryRunStore, InMemoryTaskRegistry, Metric, RunManifest, RunRepository, RunRequest,
     RunStatus, RunStore, StepCompletion, StepSpec, StepStatus, Task, TaskContext, TaskError,
-    TaskSpec, TypedTask, TypedTaskAdapter, WorkerProfile, WorkflowSpec,
+    TaskSpec, TypedTask, TypedTaskAdapter, WorkOutcome, WorkerProfile, WorkflowSpec,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -136,6 +136,39 @@ async fn durable_executor_persists_claims_and_events() {
         run.event_log
             .iter()
             .any(|event| matches!(event.event, ExecutionEvent::StepStarted { .. }))
+    );
+}
+
+#[tokio::test]
+async fn durable_worker_discovers_and_executes_active_runs() {
+    let mut registry = InMemoryTaskRegistry::default();
+    registry
+        .register(Echo { spec: spec("echo") })
+        .expect("register task");
+    let executor = DurableExecutor::in_memory(Arc::new(registry));
+    let mut workflow = WorkflowSpec::new("worker-discovery", "1").expect("valid workflow");
+    workflow
+        .add_step(StepSpec::new("echo-step", "echo").expect("valid step"))
+        .expect("add step");
+    let submitted = executor
+        .submit(workflow, json!({ "value": 9 }))
+        .await
+        .expect("submit run");
+
+    let outcome = executor.work_once(Vec::new()).await.expect("worker tick");
+    assert_eq!(
+        outcome,
+        WorkOutcome::Progressed {
+            run_id: submitted.run_id,
+            status: RunStatus::Succeeded,
+        }
+    );
+    assert_eq!(
+        executor
+            .work_once(Vec::new())
+            .await
+            .expect("idle worker tick"),
+        WorkOutcome::Idle
     );
 }
 
