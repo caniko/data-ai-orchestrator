@@ -1,0 +1,35 @@
+name: PostgreSQL integration
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres:
+    runs-on: atlas
+    container: rust:1.85-bookworm
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dao
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dao"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Run PostgreSQL integration test
+        env:
+          POSTGRES_TEST_DATABASE_URL: postgres://postgres:postgres@postgres:5432/dao
+        run: cargo test --all-features --test postgres -- --ignored
