@@ -2,7 +2,7 @@
   description = "Rust project";
 
   inputs = {
-    rs-harbor.url = "git+https://codeberg.org/caniko/rs-harbor.git?ref=trunk&rev=9bfa8bdb0ecb22d7bc11448665f7fbaebae7a759";
+    rs-harbor.url = "git+https://codeberg.org/caniko/rs-harbor.git?ref=trunk&rev=c26b735eede8078f795651c4a9cbf0be8733b221";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
@@ -28,9 +28,7 @@
         overlays = [(import rust-overlay)];
       };
 
-      rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = ["rustfmt" "clippy"];
-      };
+      rustToolchain = rs-harbor.lib.mkToolchain { inherit pkgs; toolchainProfile = "nightly"; };
       craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
       buildCache = rs-harbor.lib.mkBuildCachePolicy {
         inherit pkgs;
