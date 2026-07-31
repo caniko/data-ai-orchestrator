@@ -28,24 +28,24 @@
         overlays = [(import rust-overlay)];
       };
 
-      rustToolchain = rs-harbor.lib.mkToolchain { inherit pkgs; toolchainProfile = "nightly"; };
-      craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
-      buildCache = rs-harbor.lib.mkBuildCachePolicy {
+      toolchain = rs-harbor.lib.mkToolchain {
         inherit pkgs;
-        sccachePackage = rs-harbor.packages.${system}.sccache;
-        cacheRoot = null;
-        namespaceScope = "canix-rust";
-        namespaceGeneration = 5;
+        toolchainProfile = "nightly";
+        cache = {
+          sccachePackage = rs-harbor.packages.${system}.sccache;
+          cacheRoot = null;
+          namespaceScope = "canix-rust";
+          namespaceGeneration = 5;
+        };
       };
+      inherit (toolchain) craneLib rustToolchain;
       src = craneLib.cleanCargoSource ./.;
       commonArgs = {
         inherit src;
         strictDeps = true;
       };
       cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-      package = buildCache.withRustCache {
-        package = craneLib.buildPackage (commonArgs // {inherit cargoArtifacts;});
-      };
+      package = craneLib.buildPackage (commonArgs // {inherit cargoArtifacts;});
       treefmtEval = treefmt-nix.lib.evalModule pkgs (import ./nix/treefmt.nix);
       pre-commit-check = git-hooks.lib.${system}.run {
         src = ./.;
