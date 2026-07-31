@@ -70,30 +70,32 @@
       };
       devShells.default = craneLib.devShell {
         checks = self.checks.${system};
-        packages = with pkgs; [
-          cargo-about
-          cargo-audit
-          cargo-cyclonedx
-          cargo-deny
-          cargo-llvm-cov
-          cargo-sbom
-          cargo-nextest
-          cosign
-          file
-          gnutar
-          gzip
-          jq
-          minisign
-          nodejs
-          pre-commit
-          rpm
-          util-linux
-          unzip
-          zip
-          reprepro
-          rust-analyzer
-          taplo
-        ] ++ pre-commit-check.enabledPackages;
+        packages = with pkgs;
+          [
+            cargo-about
+            cargo-audit
+            cargo-cyclonedx
+            cargo-deny
+            cargo-llvm-cov
+            cargo-sbom
+            cargo-nextest
+            cosign
+            file
+            gnutar
+            gzip
+            jq
+            minisign
+            nodejs
+            pre-commit
+            rpm
+            util-linux
+            unzip
+            zip
+            reprepro
+            rust-analyzer
+            taplo
+          ]
+          ++ pre-commit-check.enabledPackages;
         shellHook = pre-commit-check.shellHook;
       };
       apps.local-check-fast = {
