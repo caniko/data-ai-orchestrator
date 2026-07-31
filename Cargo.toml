@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 description = "A durable, policy-driven runtime for reusable data and AI workflows"
 license = "Apache-2.0"
-repository = "ssh://git@codeberg.org/caniko/data-ai-orchestrator.git"
+repository = "https://github.com/caniko/data-ai-orchestrator"
 readme = "README.md"
 exclude = ["graphify-out/**", "target/**"]
 
