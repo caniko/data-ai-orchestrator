@@ -32,6 +32,7 @@
         inherit pkgs;
         toolchainProfile = "nightly";
         cache = {
+          enable = false;
           sccachePackage = rs-harbor.packages.${system}.sccache;
           cacheRoot = null;
           namespaceScope = "canix-rust";
