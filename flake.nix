@@ -2,7 +2,8 @@
   description = "Rust project";
 
   inputs = {
-    rs-harbor.url = "git+https://github.com/caniko/rs-harbor.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
+    rs-harbor.follows = "harbor-rs";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
@@ -13,7 +14,7 @@
 
   outputs = {
     self,
-    rs-harbor,
+    harbor-rs,
     nixpkgs,
     rust-overlay,
     crane,
@@ -28,12 +29,12 @@
         overlays = [(import rust-overlay)];
       };
 
-      toolchain = rs-harbor.lib.mkToolchain {
+      toolchain = harbor-rs.lib.mkToolchain {
         inherit pkgs;
         toolchainProfile = "nightly";
         cache = {
           enable = false;
-          sccachePackage = rs-harbor.packages.${system}.sccache;
+          sccachePackage = harbor-rs.packages.${system}.sccache;
           cacheRoot = null;
           namespaceScope = "canix-rust";
           namespaceGeneration = 5;
