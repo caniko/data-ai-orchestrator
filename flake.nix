@@ -103,6 +103,11 @@
       in {
         default = devShell;
         docs = devShell;
+        msrv = pkgs.mkShell {
+          packages = [pkgs.rust-bin.stable."1.85.0".minimal];
+          RUSTFLAGS = "";
+          CARGO_ENCODED_RUSTFLAGS = "";
+        };
       };
       apps.local-check-fast = {
         type = "app";
