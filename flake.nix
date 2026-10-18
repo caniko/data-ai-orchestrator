@@ -103,6 +103,29 @@
       in {
         default = devShell;
         docs = devShell;
+        msrv = let
+          msrvToolchain = harbor-rs.lib.mkToolchain {
+            inherit pkgs;
+            toolchainFile = ./rust-toolchain-msrv.toml;
+            withRustAnalyzer = false;
+            crossTargets = [];
+          };
+        in
+          (harbor-rs.lib.mkDevShells {
+            inherit pkgs;
+            inherit (msrvToolchain) craneLib;
+            cross = harbor-rs.lib.mkCross {
+              inherit pkgs system;
+              enableOsxcross = false;
+            };
+            enableOsxcrossEnv = false;
+            opencodeLsp.enable = false;
+            extraEnv = {
+              RUSTFLAGS = "";
+              CARGO_ENCODED_RUSTFLAGS = "";
+            };
+          })
+          .default;
       };
       apps.local-check-fast = {
         type = "app";

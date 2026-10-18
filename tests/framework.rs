@@ -732,7 +732,7 @@ async fn expired_fallback_final_attempt_fails() {
         .unwrap();
     let worker = WorkerProfile::new("recovery-worker").unwrap();
     let primary_claim = store
-        .claim_next_step(&run_id, &worker, 1)
+        .claim_next_step(&run_id, &worker, 1_000)
         .await
         .unwrap()
         .unwrap();
