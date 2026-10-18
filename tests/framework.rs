@@ -297,6 +297,107 @@ async fn repository_rejects_stale_leases_and_applies_gates() {
 }
 
 #[tokio::test]
+async fn restored_snapshots_preserve_idempotency_lease_fencing_and_event_order() {
+    let store = InMemoryRunStore::default();
+    let task = spec("echo");
+    let mut workflow = WorkflowSpec::new("restored", "1").unwrap();
+    let mut step = StepSpec::new("step", "echo").unwrap();
+    step.policy.retry = data_ai_orchestrator::RetryPolicy {
+        max_attempts: 2,
+        delay: data_ai_orchestrator::RetryDelay::none(),
+    };
+    workflow.add_step(step).unwrap();
+    let mut request = RunRequest {
+        run_id: data_ai_orchestrator::RunId::new("restored-run").unwrap(),
+        manifest: RunManifest::new(
+            workflow.id.clone(),
+            "1",
+            BTreeMap::from([(task.id.clone(), task)]),
+        ),
+        workflow,
+        input: json!({"retained":true}),
+        idempotency_key: Some(IdempotencyKey::new("restored-request").unwrap()),
+    };
+    store.create_run(request.clone()).await.unwrap();
+    let worker = WorkerProfile::new("restored-worker").unwrap();
+    let first = store
+        .claim_next_step(&request.run_id, &worker, 60_000)
+        .await
+        .unwrap()
+        .unwrap();
+    let snapshot = store
+        .complete_step(
+            &first,
+            StepCompletion::retrying(
+                first.run_id.clone(),
+                first.step.id.clone(),
+                first.attempt,
+                "retry".into(),
+            ),
+        )
+        .await
+        .unwrap();
+    let restored = InMemoryRunStore::default();
+    restored.save(&snapshot).await.unwrap();
+    request.run_id = data_ai_orchestrator::RunId::new("retry-request-id").unwrap();
+    assert_eq!(
+        restored.create_run(request.clone()).await.unwrap(),
+        snapshot
+    );
+    let mut collision = snapshot.clone();
+    collision.run_id = request.run_id.clone();
+    assert!(restored.save(&collision).await.is_err());
+    assert!(
+        restored
+            .load_run(&collision.run_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let next = restored
+        .claim_next_step(&snapshot.run_id, &worker, 60_000)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        next.lease_token > first.lease_token,
+        "restoring must not reuse a retired lease token"
+    );
+    assert!(restored.renew_step(&first, 60_000).await.is_err());
+    let done = restored
+        .complete_step(
+            &next,
+            StepCompletion::succeeded(
+                next.run_id.clone(),
+                next.step.id.clone(),
+                json!({"done":true}),
+                next.attempt,
+            ),
+        )
+        .await
+        .unwrap();
+    let previous_sequence = snapshot.event_log.last().unwrap().sequence;
+    let events = restored
+        .events_since(&snapshot.run_id, previous_sequence)
+        .await
+        .unwrap();
+    assert_eq!(events.len(), 1);
+    assert!(events[0].sequence > previous_sequence);
+    assert_eq!(
+        &done.event_log[..snapshot.event_log.len()],
+        snapshot.event_log
+    );
+    assert_eq!(
+        restored
+            .finish_run(&snapshot.run_id, vec![])
+            .await
+            .unwrap()
+            .status,
+        RunStatus::Succeeded
+    );
+}
+
+#[tokio::test]
 async fn repository_rejects_policy_bypassing_completions() {
     let store = Arc::new(InMemoryRunStore::default());
     let primary = spec("primary");

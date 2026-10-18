@@ -335,11 +335,51 @@ pub struct InMemoryRunStore {
 impl RunStore for InMemoryRunStore {
     async fn save(&self, run: &RunRecord) -> Result<(), AdapterError> {
         validate_run_record_schema(run).map_err(|message| AdapterError::new("memory", message))?;
-        self.state
-            .write()
-            .await
+        let mut state = self.state.write().await;
+        if let Some(key) = &run.idempotency_key {
+            if state
+                .idempotency
+                .get(key)
+                .is_some_and(|id| id != &run.run_id)
+            {
+                return Err(AdapterError::new(
+                    "memory",
+                    "snapshot idempotency key belongs to another run",
+                ));
+            }
+        }
+        if let Some(previous) = state
             .runs
-            .insert(run.run_id.clone(), run.clone());
+            .get(&run.run_id)
+            .and_then(|run| run.idempotency_key.clone())
+        {
+            state.idempotency.remove(&previous);
+        }
+        if let Some(key) = &run.idempotency_key {
+            state.idempotency.insert(key.clone(), run.run_id.clone());
+        }
+        // Snapshot adapters may resume the repository in a fresh process. Never
+        // reuse a retired lease or event identity, including one held in history.
+        state.next_lease_token = state.next_lease_token.max(
+            run.steps
+                .values()
+                .flat_map(|step| {
+                    step.history
+                        .iter()
+                        .map(|attempt| attempt.lease_token)
+                        .chain(step.lease.iter().map(|lease| lease.token))
+                })
+                .max()
+                .unwrap_or(0),
+        );
+        state.next_event_sequence = state.next_event_sequence.max(
+            run.event_log
+                .iter()
+                .map(|event| event.sequence)
+                .max()
+                .unwrap_or(0),
+        );
+        state.runs.insert(run.run_id.clone(), run.clone());
         Ok(())
     }
 
