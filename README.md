@@ -28,7 +28,9 @@ The framework also includes a durable worker path. [`DurableExecutor`] uses a
 commit results and event envelopes atomically, recover expired workers, and
 apply evaluation gates before finalizing a run. `InMemoryRunStore` implements
 both the snapshot and repository contracts for local development and adapter
-tests.
+tests. Restoring a snapshot with `RunStore::save` also restores its idempotency
+index and advances the lease/event counters past retained history, so subsequent
+repository transitions preserve fencing and event identities.
 
 ## Example
 
