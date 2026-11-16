@@ -27,10 +27,10 @@ macro_rules! id_type {
             }
         }
 
-        impl TryFrom<&str> for $name {
-            type Error = IdentifierError;
+        impl std::str::FromStr for $name {
+            type Err = IdentifierError;
 
-            fn try_from(value: &str) -> Result<Self, Self::Error> {
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
                 Self::new(value)
             }
         }
